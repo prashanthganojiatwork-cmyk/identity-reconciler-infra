@@ -11,11 +11,10 @@ export class NetworkingStack extends cdk.Stack {
     super(scope, id, props);
 
     // Create a simple VPC with 1 public subnet (free tier friendly)
-    // Specify availabilityZones explicitly to avoid AWS context lookups
     this.vpc = new ec2.Vpc(this, 'ReconcilerVpc', {
       vpcName: 'identity-reconciler-vpc',
       availabilityZones: ['ap-south-2a'],
-      natGateways: 0, // No NAT gateway to stay free tier
+      natGateways: 0,
       subnetConfiguration: [
         {
           cidrMask: 24,
@@ -38,6 +37,13 @@ export class NetworkingStack extends cdk.Stack {
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(8080),
       'Allow inbound HTTP on port 8080'
+    );
+
+    // Allow inbound HTTPS (port 443) for future use
+    this.securityGroup.addIngressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'Allow inbound HTTPS on port 443'
     );
 
     // Create Elastic IP for stable public address

@@ -26,21 +26,30 @@ export class EcsStack extends cdk.Stack {
       vpc,
     });
 
-    // Create Auto Scaling Group for EC2 capacity (t2.micro for free tier)
+    // Create Auto Scaling Group for EC2 capacity (t3.micro for free tier)
     const autoScalingGroup = new autoscaling.AutoScalingGroup(this, 'ReconcilerASG', {
       vpc,
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
       machineImage: ecs.EcsOptimizedImage.amazonLinux2(),
       securityGroup,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       associatePublicIpAddress: true,
       minCapacity: 1,
       maxCapacity: 1,
+      // Require IMDSv2 for security
+      requireImdsv2: true,
     });
 
-    // Associate Elastic IP with the EC2 instance via user data
+    // Grant SSM access for debugging (Session Manager)
+    autoScalingGroup.role.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore')
+    );
+
+    // Associate Elastic IP using IMDSv2-compatible user data
     autoScalingGroup.addUserData(
-      'INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)',
+      '#!/bin/bash',
+      'TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")',
+      'INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)',
       `ALLOCATION_ID=${elasticIp.attrAllocationId}`,
       'aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id $ALLOCATION_ID --region ap-south-2'
     );
@@ -55,6 +64,7 @@ export class EcsStack extends cdk.Stack {
     const capacityProvider = new ecs.AsgCapacityProvider(this, 'ReconcilerCapacityProvider', {
       autoScalingGroup,
       capacityProviderName: 'reconciler-ec2-capacity',
+      enableManagedTerminationProtection: false,
     });
     cluster.addAsgCapacityProvider(capacityProvider);
 
@@ -86,9 +96,6 @@ export class EcsStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(5),
         retries: 3,
         startPeriod: cdk.Duration.seconds(60),
-      },
-      environment: {
-        JAVA_OPTS: '-Xmx384m',
       },
     });
 

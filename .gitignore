@@ -1,26 +1,20 @@
-# Terraform
-.terraform/
-*.tfstate
-*.tfstate.backup
-*.tfplan
-.terraform.lock.hcl
-crash.log
+# Dependencies
+node_modules/
 
-# Environment variables / secrets
-.env
-*.tfvars
-!example.tfvars
+# CDK output
+cdk.out/
+
+# TypeScript compiled output
+*.js
+!jest.config.js
+*.d.ts
 
 # IDE
 .idea/
-*.iws
-*.iml
-*.ipr
 .vscode/
 
-# OS
+# OS files
 .DS_Store
-Thumbs.db
 
-# Logs
-*.log
+# npm debug
+npm-debug.log*

@@ -1,0 +1,38 @@
+{
+  "repositoryName": "identity-reconciler",
+  "region": "ap-south-2",
+  "accountId": "097853039310",
+  "imageTagMutability": "MUTABLE",
+  "imageScanningConfiguration": {
+    "scanOnPush": true
+  },
+  "encryptionConfiguration": {
+    "encryptionType": "AES256"
+  },
+  "lifecyclePolicy": {
+    "rules": [
+      {
+        "rulePriority": 1,
+        "description": "Keep only last 5 images to stay within free tier storage",
+        "selection": {
+          "tagStatus": "any",
+          "countType": "imageCountMoreThan",
+          "countNumber": 5
+        },
+        "action": {
+          "type": "expire"
+        }
+      }
+    ]
+  },
+  "tags": [
+    {
+      "key": "Project",
+      "value": "identity-reconciler"
+    },
+    {
+      "key": "Environment",
+      "value": "production"
+    }
+  ]
+}

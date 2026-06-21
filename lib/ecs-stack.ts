@@ -19,12 +19,21 @@ export class EcsStack extends cdk.Stack {
     super(scope, id, props);
 
     const { vpc, securityGroup, elasticIp, repository } = props;
+    const region = this.region;
 
     // Create ECS Cluster
     const cluster = new ecs.Cluster(this, 'ReconcilerCluster', {
       clusterName: 'identity-reconciler-cluster',
       vpc,
     });
+
+    // User data for EIP association (proven pattern)
+    const userData = ec2.UserData.forLinux();
+    userData.addCommands(
+      'TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")',
+      'INSTANCE_ID=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)',
+      `aws ec2 associate-address --region ${region} --instance-id "$INSTANCE_ID" --allocation-id ${elasticIp.attrAllocationId} --allow-reassociation || echo "EIP associate failed, continuing"`,
+    );
 
     // Create Auto Scaling Group for EC2 capacity (t3.micro for free tier)
     const autoScalingGroup = new autoscaling.AutoScalingGroup(this, 'ReconcilerASG', {
@@ -36,8 +45,8 @@ export class EcsStack extends cdk.Stack {
       associatePublicIpAddress: true,
       minCapacity: 1,
       maxCapacity: 1,
-      // Require IMDSv2 for security
       requireImdsv2: true,
+      userData,
     });
 
     // Grant SSM access for debugging (Session Manager)
@@ -45,18 +54,9 @@ export class EcsStack extends cdk.Stack {
       iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore')
     );
 
-    // Associate Elastic IP using IMDSv2-compatible user data
-    autoScalingGroup.addUserData(
-      '#!/bin/bash',
-      'TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")',
-      'INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)',
-      `ALLOCATION_ID=${elasticIp.attrAllocationId}`,
-      'aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id $ALLOCATION_ID --region ap-south-2'
-    );
-
     // Grant the ASG instances permission to associate Elastic IP
     autoScalingGroup.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['ec2:AssociateAddress'],
+      actions: ['ec2:AssociateAddress', 'ec2:DescribeAddresses'],
       resources: ['*'],
     }));
 
